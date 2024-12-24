@@ -1,0 +1,54 @@
+# Indica que este es el archivo raíz para las reglas de estilo
+root = true
+
+# Reglas generales para todos los archivos C#
+[*.cs]
+
+# Usar espacios en lugar de tabulaciones
+indent_style = space
+
+# Tamaño de la sangría
+indent_size = 4
+
+# Codificación de caracteres
+charset = utf-8
+
+# Eliminar espacios finales al guardar
+trim_trailing_whitespace = true
+
+# Insertar una nueva línea al final de los archivos
+insert_final_newline = true
+
+# Líneas de código
+max_line_length = 140
+
+# Espaciado
+csharp_space_after_keywords_in_control_flow_statements = false
+csharp_space_around_binary_operators = before_and_after
+
+# Organización de using
+dotnet_sort_system_directives_first = true
+
+# Nombres de campos privados (camelCase con prefijo _)
+dotnet_naming_rule.private_field_should_be_camel_case.severity = warning
+dotnet_naming_rule.private_field_should_be_camel_case.symbols = private_fields
+dotnet_naming_rule.private_field_should_be_camel_case.style = camel_case
+
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_fields.required_modifiers = none
+
+dotnet_naming_styles.camel_case.capitalization = camel_case
+
+# Métodos y propiedades (PascalCase)
+dotnet_naming_rule.methods_should_be_pascal_case.severity = warning
+dotnet_naming_rule.methods_should_be_pascal_case.symbols = methods
+dotnet_naming_rule.methods_should_be_pascal_case.style = pascal_case
+
+dotnet_naming_symbols.methods.applicable_kinds = method
+dotnet_naming_styles.pascal_case.capitalization = pascal_case
+
+# Optimización de Unity
+# [SerializeField] private int health; // No generará advertencias.
+dotnet_diagnostic.CS0414.severity = silent
+dotnet_diagnostic.CS1998.severity = silent
+

@@ -1,0 +1,36 @@
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+categories:
+  - title: 🚀 Features
+    labels:
+      - 'feature'
+      - 'enhancement'
+  - title: 🐛 Fixes
+    labels:
+      - 'bug'
+      - 'fix'
+      - 'bugfix'
+  - title: 🛠 Maintenance
+    labels:
+      - 'refactor'
+      - 'documentation'
+change-template: '- ${{change.title}} (#${{change.number}} by @${{change.author}})'
+version-resolver:
+  major:
+    labels:
+      - 'major'
+  minor:
+    labels:
+      - 'minor'
+  patch:
+    labels:
+      - 'patch'
+  default: patch
+template: |
+  ## [v$RESOLVED_VERSION] - $DATE
+  Este archivo contiene un resumen de los cambios introducidos en cada versión.
+
+  ## Cambios
+  $CHANGES
+
+  **Full Changelog**: https://github.com/$OWNER/$REPO/compare/$PREVIOUS_TAG...$NEW_TAG

@@ -1,0 +1,28 @@
+name: Changelog with Release Drafter
+on:
+  workflow_dispatch: {}
+  pull_request:
+    types: [closed]
+jobs:
+  update_release_draft:
+    runs-on: ubuntu-latest
+    permissions:
+      # write permission is required to create a github release
+      contents: write
+      # write permission is required for autolabeler
+      # otherwise, read permission is required at least
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set formatted date
+        run: echo "RELEASE_DATE=$(date +'%d/%m/%Y')" >> $GITHUB_ENV
+
+      - name: Set up Release Drafter
+        uses: release-drafter/release-drafter@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DATE: ${{ env.RELEASE_DATE }}
+        with:
+          config-name: release-drafter.yml

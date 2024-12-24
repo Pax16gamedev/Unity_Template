@@ -1,0 +1,180 @@
+name: Create the Windows Build
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - PRE_PRODUCCION
+      - PRODUCCION
+jobs:
+  free-disk-space:
+    name: Free space disk on Ubuntu
+    runs-on: ubuntu-latest
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+  build:
+    name: Build ${{ matrix.targetPlatform }}
+    runs-on: ubuntu-latest
+    needs: free-disk-space
+    strategy:
+      fail-fast: false
+      matrix:
+        targetPlatform:
+          - StandaloneWindows64
+    env:
+      UNITY_VERSION: ${{ vars.UNITY_VERSION }}
+      UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+      UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+    steps:
+      - name: Set current date as env variable
+        run: echo "START_TIME=$(date -u +%s)" >> $GITHUB_ENV
+
+      - name: Validate required secrets
+        run: |
+          if [ -z "${{ secrets.UNITY_EMAIL }}" ] || [ -z "${{ secrets.UNITY_PASSWORD }}" ] || [ -z "${{ secrets.UNITY_LICENSE }}" ]; then
+            echo "Required secrets are missing. Please check UNITY_EMAIL, UNITY_PASSWORD, and UNITY_LICENSE."
+            exit 1
+          fi
+
+      # Checkout
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      # Cache
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            Library
+            Temp
+          key: Library-${{ matrix.targetPlatform }}
+          restore-keys: Library-
+
+        # Build
+      - name: Build
+        uses: game-ci/unity-builder@v4
+        with:
+          targetPlatform: ${{ matrix.targetPlatform }}
+          unityVersion: ${{ vars.UNITY_VERSION }}
+          versioning: Semantic
+          buildName: ${{ vars.PROJECT_NAME }}
+
+      # Upload Build
+      - name: Upload Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Build-${{ vars.PROJECT_NAME }}-${{ matrix.targetPlatform }}-${{ github.run_id }}
+          path: build/${{ matrix.targetPlatform }}
+          if-no-files-found: "warn"
+
+      - name: Get Artifact ID
+        id: get-artifact-id
+        run: |
+          artifacts=$(curl -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts")
+
+          artifact_id=$(echo "$artifacts" | jq '.artifacts[0].id')
+          echo "Artifact ID: $artifact_id"
+          echo "artifact_id=$artifact_id" >> $GITHUB_OUTPUT
+
+      - name: Calculate Build Duration
+        if: always()
+        id: duration
+        run: |
+          echo "Workflow started at: ${{ env.START_TIME }}"
+          start_time=${{ env.START_TIME }}
+          end_time=$(date +%s)
+          duration=$((end_time - start_time))
+
+          echo "Start time (epoch): $start_time"
+          echo "End time (epoch): $end_time"
+          echo "Duration (seconds): $duration"
+
+          hours=$((duration / 3600))
+          minutes=$(((duration % 3600) / 60))
+          seconds=$((duration % 60))
+          formatted_duration=$(printf "%02d:%02d:%02d" $hours $minutes $seconds)
+
+          echo "formatted_duration=${formatted_duration}" >> $GITHUB_ENV
+
+      - name: Set variables
+        if: always()
+        id: set-vars
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "STATUS=✅ La build ${{ matrix.targetPlatform }} para la rama **${{ github.ref_name }}** se ha completado con éxito." >> $GITHUB_ENV
+            echo "COLOR=3066993" >> $GITHUB_ENV
+            echo "THUMBNAIL_URL=https://e7.pngegg.com/pngimages/223/663/png-clipart-green-check-illustration-check-mark-checkbox-yes-miscellaneous-angle.png" >> $GITHUB_ENV
+          else
+            echo "STATUS=❌ La build ${{ matrix.targetPlatform }} para la rama **${{ github.ref_name }}** ha fallado." >> $GITHUB_ENV
+            echo "COLOR=15158332" >> $GITHUB_ENV
+            echo "THUMBNAIL_URL=https://e1.pngegg.com/pngimages/720/726/png-clipart-emoji-sticker-x-icon.png" >> $GITHUB_ENV
+          fi
+
+          echo "LINK_ACTION=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_ENV
+          echo "TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_ENV
+
+      # Set notification message
+      # Enlace de descarga directa al artifact: https://api.github.com/repos/${{ github.repository }}/actions/artifacts/${{ steps.get-artifact-id.outputs.artifact_id }}/zip
+      - name: Set Discord Notification Message
+        if: always()
+        id: set-message
+        run: |
+          cat <<EOF > payload.json
+          {
+              "tts": false,
+              "embeds": [
+                {
+                  "title": "👷 Workflow terminado",
+                  "url": "${{ env.LINK_ACTION }}",
+                  "description": "${{ env.STATUS }}",
+                  "color": "${{ env.COLOR }}",
+                  "fields": [
+                    { "name": "🌿 Rama ", "value": "${{ github.ref_name }}" },
+                    { "name": "🎮 Plataforma ", "value": "${{ matrix.targetPlatform }}" },
+                    { "name": "🔗 Enlace ", "value": "[Ver artifact](${{ env.LINK_ACTION }}#artifacts)" },
+                    { "name": "⏱️ Duración ", "value": "${{ env.formatted_duration }}" }
+                  ],
+                  "footer": {
+                    "text": "GitHub Actions - Discord Integration", 
+                    "icon_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
+                  },
+                  "thumbnail": {
+                    "url": "${{ env.THUMBNAIL_URL }}"
+                  },
+                  "timestamp": "${{ env.TIMESTAMP }}"
+                }
+              ]
+            }
+          EOF
+
+      # Notify Discord
+      - name: Notify Discord
+        if: always()
+        run: |
+          if [ ! -f payload.json ]; then
+            echo '{"content": "Error al construir el mensaje JSON para Discord ❌❌❌."}' > payload.json
+          fi
+          
+          response_code=$(curl -s -o /dev/null -w "%{http_code}" -H "Content-Type: application/json" -d @payload.json ${{ secrets.DISCORD_WEBHOOK_URL }})
+
+          if [ "$response_code" -ge 400 ]; then
+            echo "Error: Discord API devolvió un código de estado $response_code ❌."
+            echo '{"content": "Error al enviar el mensaje a Discord ❌. [Ver workflow](${{ env.LINK_ACTION }})"}' > payload.json
+            curl -s -H "Content-Type: application/json" -d @payload.json ***
+          else
+            echo "Mensaje enviado con éxito ✅."
+          fi

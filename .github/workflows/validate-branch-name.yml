@@ -1,0 +1,22 @@
+name: Validate Branch Name
+on:
+  workflow_dispatch: {}
+  pull_request:
+    types: [opened]
+jobs:
+  validate_branch_name:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check Branch Name
+        run: |
+          branch_name="${{ github.head_ref }}"
+          valid_pattern="^(feature|enhancement|bugfix|hotfix|fix|refactor|documentation|release)/[a-zA-Z0-9._-]+$"
+
+          if [[ ! $branch_name =~ $valid_pattern ]]; then
+            echo "Error: El nombre de la rama '$branch_name' no cumple con la convención."
+            exit 1
+          fi
