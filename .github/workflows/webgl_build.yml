@@ -186,7 +186,7 @@ jobs:
           if [ "$response_code" -ge 400 ]; then
             echo "Error: Discord API devolvió un código de estado $response_code ❌."
             echo '{"content": "Error al enviar el mensaje a Discord ❌. [Ver workflow](${{ env.LINK_ACTION }})"}' > payload.json
-            curl -s -H "Content-Type: application/json" -d @payload.json ***
+            curl -s -H "Content-Type: application/json" -d @payload.json ${{ secrets.DISCORD_WEBHOOK_URL }}
           else
             echo "Mensaje enviado con éxito ✅."
           fi
