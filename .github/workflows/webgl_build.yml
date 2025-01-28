@@ -10,9 +10,43 @@ on:
     types:
       - completed
 jobs:
+  validate-secrets:
+    name: Validate required secrets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if secrets are set
+        run: |
+          missing_secrets=()
+          if [ -z "${{ secrets.UNITY_EMAIL }}" ]; then
+            missing_secrets+=("EMAIL")
+          fi
+          if [ -z "${{ secrets.UNITY_PASSWORD }}" ]; then
+            missing_secrets+=("PASSWORD")
+          fi
+          if [ -z "${{ secrets.UNITY_LICENSE }}" ]; then
+            missing_secrets+=("LICENSE")
+          fi
+          if [ -z "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
+            missing_secrets+=("DISCORD_WEBHOOK_URL")
+          fi
+
+          if [ ${#missing_secrets[@]} -ne 0 ]; then
+            echo "Error: The following secrets are not set: ${missing_secrets[@]} ❌."
+            exit 1
+          fi
+
+          if [ -z "${{ vars.PROJECT_NAME }}" ]; then
+            echo "Error: PROJECT_NAME variable is not set ❌."
+            echo "PROJECT_NAME=defaultUnityProject" >> $GITHUB_ENV
+            echo "Setting PROJECT_NAME to ${{ vars.PROJECT_NAME }}"
+          fi
+
+          echo "OK - All set ✅."
+
   free-disk-space:
     name: Free space disk on Ubuntu
     runs-on: ubuntu-latest
+    needs: validate-secrets
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
@@ -37,13 +71,6 @@ jobs:
     steps:
       - name: Set current date as env variable
         run: echo "START_TIME=$(date -u +%s)" >> $GITHUB_ENV
-
-      - name: Validate required secrets
-        run: |
-          if [ -z "${{ secrets.UNITY_EMAIL }}" ] || [ -z "${{ secrets.UNITY_PASSWORD }}" ] || [ -z "${{ secrets.UNITY_LICENSE }}" ]; then
-            echo "Required secrets are missing. Please check UNITY_EMAIL, UNITY_PASSWORD, and UNITY_LICENSE."
-            exit 1
-          fi
 
       # Checkout
       - name: Check out my unity project.
