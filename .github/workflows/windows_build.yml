@@ -33,7 +33,7 @@ jobs:
 
           if [ -z "${{ vars.PROJECT_NAME }}" ]; then
             echo "Error: PROJECT_NAME variable is not set ❌."
-            echo "PROJECT_NAME=defaultUnityProject" >> $GITHUB_ENV
+            echo "PROJECT_NAME=${{ github.event.repository.name }}" >> $GITHUB_ENV
             echo "Setting PROJECT_NAME to ${{ vars.PROJECT_NAME }}"
           fi
 
@@ -56,14 +56,11 @@ jobs:
           swap-storage: true
 
   build:
-    name: Build ${{ matrix.targetPlatform }}
+    name: Build StandaloneWindows64
     runs-on: ubuntu-latest
     needs: free-disk-space
     strategy:
       fail-fast: false
-      matrix:
-        targetPlatform:
-          - StandaloneWindows64
     env:
       UNITY_VERSION: ${{ vars.UNITY_VERSION }}
       UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
@@ -86,14 +83,14 @@ jobs:
           path: |
             Library
             Temp
-          key: Library-${{ matrix.targetPlatform }}
+          key: Library-StandaloneWindows64
           restore-keys: Library-
 
         # Build
       - name: Build
         uses: game-ci/unity-builder@v4
         with:
-          targetPlatform: ${{ matrix.targetPlatform }}
+          targetPlatform: StandaloneWindows64
           unityVersion: ${{ vars.UNITY_VERSION }}
           versioning: Semantic
           buildName: ${{ vars.PROJECT_NAME }}
@@ -102,8 +99,8 @@ jobs:
       - name: Upload Build
         uses: actions/upload-artifact@v4
         with:
-          name: Build-${{ vars.PROJECT_NAME }}-${{ matrix.targetPlatform }}-${{ github.run_id }}
-          path: build/${{ matrix.targetPlatform }}
+          name: Build-${{ vars.PROJECT_NAME }}-StandaloneWindows64-${{ github.run_id }}
+          path: build/StandaloneWindows64
           if-no-files-found: "warn"
 
       - name: Get Artifact ID
@@ -142,20 +139,21 @@ jobs:
         id: set-vars
         run: |
           if [ "${{ job.status }}" == "success" ]; then
-            echo "STATUS=✅ La build ${{ matrix.targetPlatform }} para la rama **${{ github.ref_name }}** se ha completado con éxito." >> $GITHUB_ENV
+            echo "STATUS=✅ La build StandaloneWindows64 para la rama **${{ github.ref_name }}** se ha completado con éxito." >> $GITHUB_ENV
             echo "COLOR=3066993" >> $GITHUB_ENV
             echo "THUMBNAIL_URL=https://e7.pngegg.com/pngimages/223/663/png-clipart-green-check-illustration-check-mark-checkbox-yes-miscellaneous-angle.png" >> $GITHUB_ENV
           else
-            echo "STATUS=❌ La build ${{ matrix.targetPlatform }} para la rama **${{ github.ref_name }}** ha fallado." >> $GITHUB_ENV
+            echo "STATUS=❌ La build StandaloneWindows64 para la rama **${{ github.ref_name }}** ha fallado." >> $GITHUB_ENV
             echo "COLOR=15158332" >> $GITHUB_ENV
             echo "THUMBNAIL_URL=https://e1.pngegg.com/pngimages/720/726/png-clipart-emoji-sticker-x-icon.png" >> $GITHUB_ENV
           fi
 
-          echo "LINK_ACTION=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_ENV
+          echo "LINK_ACTION=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts/${{ steps.get-artifact-id.outputs.artifact_id }}" >> $GITHUB_ENV
           echo "TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_ENV
 
       # Set notification message
-      # Enlace de descarga directa al artifact: https://api.github.com/repos/${{ github.repository }}/actions/artifacts/${{ steps.get-artifact-id.outputs.artifact_id }}/zip
+      # Enlace de descarga directa al artifact por API: https://api.github.com/repos/${{ github.repository }}/actions/artifacts/${{ steps.get-artifact-id.outputs.artifact_id }}/zip
+      # Enlace público de descarga directa al artifact: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts/${{ steps.get-artifact-id.outputs.artifact_id }}
       - name: Set Discord Notification Message
         if: always()
         id: set-message
@@ -171,13 +169,16 @@ jobs:
                   "color": "${{ env.COLOR }}",
                   "fields": [
                     { "name": "🌿 Rama ", "value": "${{ github.ref_name }}" },
-                    { "name": "🎮 Plataforma ", "value": "${{ matrix.targetPlatform }}" },
-                    { "name": "🔗 Enlace ", "value": "[Ver artifact](${{ env.LINK_ACTION }}#artifacts)" },
+                    { "name": "🎮 Plataforma ", "value": "StandaloneWindows64" },
+                    { "name": "🔗 Enlace ", "value": "[Descargar artifact](${{ env.LINK_ACTION }})" },
                     { "name": "⏱️ Duración ", "value": "${{ env.formatted_duration }}" }
                   ],
                   "footer": {
                     "text": "GitHub Actions - Discord Integration", 
                     "icon_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
+                  },
+                  "author": {
+                    "name": "${{ vars.PROJECT_NAME }}"
                   },
                   "thumbnail": {
                     "url": "${{ env.THUMBNAIL_URL }}"
@@ -201,7 +202,7 @@ jobs:
           if [ "$response_code" -ge 400 ]; then
             echo "Error: Discord API devolvió un código de estado $response_code ❌."
             echo '{"content": "Error al enviar el mensaje a Discord ❌. [Ver workflow](${{ env.LINK_ACTION }})"}' > payload.json
-            curl -s -H "Content-Type: application/json" -d @payload.json ${{ secrets.DISCORD_WEBHOOK_URL }}
+            curl -s -H "Content-Type: application/json" -d @payload.json ***
           else
             echo "Mensaje enviado con éxito ✅."
           fi
