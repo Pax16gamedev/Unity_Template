@@ -10,9 +10,43 @@ on:
     types:
       - completed
 jobs:
+  validate-secrets:
+    name: Validate required secrets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if secrets are set
+        run: |
+          missing_secrets=()
+          if [ -z "${{ secrets.UNITY_EMAIL }}" ]; then
+            missing_secrets+=("EMAIL")
+          fi
+          if [ -z "${{ secrets.UNITY_PASSWORD }}" ]; then
+            missing_secrets+=("PASSWORD")
+          fi
+          if [ -z "${{ secrets.UNITY_LICENSE }}" ]; then
+            missing_secrets+=("LICENSE")
+          fi
+          if [ -z "${{ secrets.DISCORD_WEBHOOK_URL }}" ]; then
+            missing_secrets+=("DISCORD_WEBHOOK_URL")
+          fi
+
+          if [ ${#missing_secrets[@]} -ne 0 ]; then
+            echo "Error: The following secrets are not set: ${missing_secrets[@]} ❌."
+            exit 1
+          fi
+
+          if [ -z "${{ vars.PROJECT_NAME }}" ]; then
+            echo "Error: PROJECT_NAME variable is not set ❌."
+            echo "PROJECT_NAME=${{ github.event.repository.name }}" >> $GITHUB_ENV
+            echo "Setting PROJECT_NAME to ${{ vars.PROJECT_NAME }}"
+          fi
+
+          echo "OK - All set ✅."
+
   free-disk-space:
     name: Free space disk on Ubuntu
     runs-on: ubuntu-latest
+    needs: validate-secrets
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
@@ -26,24 +60,17 @@ jobs:
           swap-storage: true
 
   build:
-    name: Build ${{ matrix.targetPlatform }}
+    name: Build WebGL
     runs-on: ubuntu-latest
     needs: free-disk-space
     strategy:
       fail-fast: false
       matrix:
-        targetPlatform:
-          - WebGL
+        include:
+          - platform: WebGL
     steps:
       - name: Set current date as env variable
         run: echo "START_TIME=$(date -u +%s)" >> $GITHUB_ENV
-
-      - name: Validate required secrets
-        run: |
-          if [ -z "${{ secrets.UNITY_EMAIL }}" ] || [ -z "${{ secrets.UNITY_PASSWORD }}" ] || [ -z "${{ secrets.UNITY_LICENSE }}" ]; then
-            echo "Required secrets are missing. Please check UNITY_EMAIL, UNITY_PASSWORD, and UNITY_LICENSE."
-            exit 1
-          fi
 
       # Checkout
       - name: Check out my unity project.
@@ -55,7 +82,7 @@ jobs:
           path: |
             Library
             Temp
-          key: Library-${{ matrix.targetPlatform }}
+          key: Library-WebGL
 
       - name: Clean /tmp and /opt
         run: |
@@ -69,7 +96,7 @@ jobs:
         
 
       # Build
-      - name: Create the WebGL build
+      - name: Build
         uses: game-ci/unity-builder@v4
         env:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
@@ -84,15 +111,15 @@ jobs:
       - name: Measure Build Folder Size
         run: |
           echo "Build folder size:"
-          du -sh build/${{ matrix.targetPlatform }} || echo "Build folder not found."
+          du -sh build/WebGL || echo "Build folder not found."
         
 
       # Upload Build
-      - name: Upload the WebGL Build
+      - name: Upload Build
         uses: actions/upload-artifact@v4
         with:
-          name: Build ${{ vars.PROJECT_NAME }}-${{ matrix.targetPlatform }}-${{ github.run_id }}
-          path: build/${{ matrix.targetPlatform }}
+          name: Build ${{ vars.PROJECT_NAME }}-WebGL-${{ github.run_id }}
+          path: build/WebGL
           if-no-files-found: "warn"
 
       # Deploy to GH
@@ -100,7 +127,7 @@ jobs:
         uses: JamesIves/github-pages-deploy-action@4.1.3
         with:
           branch: gh-pages
-          folder: build/${{ matrix.targetPlatform }}
+          folder: build/WebGL
           target-folder: .
 
       - name: Calculate Build Duration
@@ -128,11 +155,11 @@ jobs:
         id: set-vars
         run: |
           if [ "${{ job.status }}" == "success" ]; then
-            echo "STATUS=✅ La build ${{ matrix.targetPlatform }} para la rama **${{ github.ref_name }}** se ha completado con éxito." >> $GITHUB_ENV
+            echo "STATUS=✅ La build WebGL para la rama **${{ github.ref_name }}** se ha completado con éxito." >> $GITHUB_ENV
             echo "COLOR=3066993" >> $GITHUB_ENV
             echo "THUMBNAIL_URL=https://e7.pngegg.com/pngimages/223/663/png-clipart-green-check-illustration-check-mark-checkbox-yes-miscellaneous-angle.png" >> $GITHUB_ENV
           else
-            echo "STATUS=❌ La build ${{ matrix.targetPlatform }} para la rama **${{ github.ref_name }}** ha fallado." >> $GITHUB_ENV
+            echo "STATUS=❌ La build WebGL para la rama **${{ github.ref_name }}** ha fallado." >> $GITHUB_ENV
             echo "COLOR=15158332" >> $GITHUB_ENV
             echo "THUMBNAIL_URL=https://e1.pngegg.com/pngimages/720/726/png-clipart-emoji-sticker-x-icon.png" >> $GITHUB_ENV
           fi
@@ -156,13 +183,16 @@ jobs:
                   "color": "${{ env.COLOR }}",
                   "fields": [
                     { "name": "🌿 Rama ", "value": "${{ github.ref_name }}" },
-                    { "name": "🎮 Plataforma ", "value": "${{ matrix.targetPlatform }}" },
+                    { "name": "🎮 Plataforma ", "value": "WebGL" },
                     { "name": "🔗 Enlace ", "value": "[Ver WebGL](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ vars.PROJECT_NAME }})" },
                     { "name": "⏱️ Duración ", "value": "${{ env.formatted_duration }}" }
                   ],
                   "footer": { 
                     "text": "GitHub Actions - Discord Integration", 
                     "icon_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
+                  },
+                  "author": {
+                    "name": "${{ vars.PROJECT_NAME }}"
                   },
                   "thumbnail": {
                     "url": "${{ env.THUMBNAIL_URL }}"
