@@ -8,19 +8,15 @@ documentation:
 
 # Add 'feature' label to any PR where the head branch name starts with `feature` or has a `feature` section in the name
 feature:
- - head-branch: ['^feature', 'feature']
+ - head-branch: ['^feature.*']
 
 # Add 'bug' label to any PR where the head branch name starts with `bug` or has a `bug` section in the name
-bug:
-  - head-branch: ['^bug', 'bug']
-
-# Add 'fix' label to any PR where the head branch name starts with `fix` or has a `fix` section in the name
-fix:
-  - head-branch: ['^fix', 'fix']
+bugfix:
+  - head-branch: ['^bug.*', '^fix.*']
 
 # Add 'enhancement' label to any PR where the head branch name starts with `enhancement` or has a `enhancement` section in the name
 enhancement:
-  - head-branch: ['^enhancement', 'enhancement']
+  - head-branch: ['^enhancement.*']
 
 # Add 'release' label to any PR that is opened against the `main` branch
 release:

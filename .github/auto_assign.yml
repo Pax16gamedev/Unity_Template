@@ -4,7 +4,8 @@ addReviewers: true
 # Set to true to add assignees to pull requests
 addAssignees: false
 
-skipDraft: true        # no asigna reviewers si la PR es draft
+# No asigna reviewers si la PR es draft
+skipDraft: true        
 
 # How many reviewers to add. Default is 1 if omitted. 0 means all reviewers.
 numberOfReviewers: 0

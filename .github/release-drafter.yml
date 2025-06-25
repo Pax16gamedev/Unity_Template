@@ -7,8 +7,6 @@ categories:
       - 'enhancement'
   - title: 🐛 Fixes
     labels:
-      - 'bug'
-      - 'fix'
       - 'bugfix'
   - title: 🛠 Maintenance
     labels:
@@ -27,8 +25,8 @@ version-resolver:
       - 'patch'
   default: patch
 template: |
-  ## [v$RESOLVED_VERSION] - $DATE
-  Este archivo contiene un resumen de los cambios introducidos en cada versión.
+  ## [v$RESOLVED_VERSION] - ${{ env.RELEASE_DATE }}
+  Este archivo contiene un resumen de los cambios introducidos en esta versión.
 
   ## Cambios
   $CHANGES

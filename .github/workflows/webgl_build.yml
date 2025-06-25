@@ -65,6 +65,9 @@ jobs:
     needs: free-disk-space
     strategy:
       fail-fast: false
+      matrix:
+        include:
+          - platform: WebGL
     steps:
       - name: Set current date as env variable
         run: echo "START_TIME=$(date -u +%s)" >> $GITHUB_ENV
