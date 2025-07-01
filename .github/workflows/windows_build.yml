@@ -98,6 +98,16 @@ jobs:
           versioning: Semantic
           buildName: ${{ vars.PROJECT_NAME }}
 
+      - name: Calculate Build Size
+        id: build-size
+        run: |
+          if [ -d build/StandaloneWindows64 ]; then
+            size=$(du -sh build/StandaloneWindows64 | cut -f1)
+            echo "BUILD_SIZE=$size" >> $GITHUB_ENV
+          else
+            echo "BUILD_SIZE=N/A" >> $GITHUB_ENV
+          fi
+
       # Upload Build
       - name: Upload Build
         uses: actions/upload-artifact@v4
@@ -143,10 +153,12 @@ jobs:
         run: |
           if [ "${{ job.status }}" == "success" ]; then
             echo "STATUS=✅ La build StandaloneWindows64 para la rama **${{ github.ref_name }}** se ha completado con éxito." >> $GITHUB_ENV
+            echo "STATUS_CODE=ok" >> $GITHUB_ENV
             echo "COLOR=3066993" >> $GITHUB_ENV
             echo "THUMBNAIL_URL=https://e7.pngegg.com/pngimages/223/663/png-clipart-green-check-illustration-check-mark-checkbox-yes-miscellaneous-angle.png" >> $GITHUB_ENV
           else
             echo "STATUS=❌ La build StandaloneWindows64 para la rama **${{ github.ref_name }}** ha fallado." >> $GITHUB_ENV
+            echo "STATUS_CODE=fail" >> $GITHUB_ENV
             echo "COLOR=15158332" >> $GITHUB_ENV
             echo "THUMBNAIL_URL=https://e1.pngegg.com/pngimages/720/726/png-clipart-emoji-sticker-x-icon.png" >> $GITHUB_ENV
           fi
@@ -192,6 +204,33 @@ jobs:
             }
           EOF
 
+      - name: Generate build metrics JSON
+        if: always()
+        run: |
+          mkdir -p metrics
+          cat <<EOF > metrics/build-metrics.json
+          {
+            "project": "${{ vars.PROJECT_NAME }}",
+            "platform": "StandaloneWindows64",
+            "branch": "${{ github.ref_name }}",
+            "status": "${{ env.STATUS_CODE }}",
+            "build_size": "${{ env.BUILD_SIZE }}",
+            "duration": "${{ env.formatted_duration }}",
+            "commit": "${{ github.sha }}",
+            "commit_message": "$(git log -1 --pretty=format:'%s')",
+            "author": "$(git log -1 --pretty=format:'%an')",
+            "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+      - name: Upload build metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-metrics-${{ vars.PROJECT_NAME }}-${{ github.run_id }}
+          path: metrics/build-metrics.json
+
+
       # Notify Discord
       - name: Notify Discord
         if: always()
@@ -209,3 +248,33 @@ jobs:
           else
             echo "Mensaje enviado con éxito ✅."
           fi
+
+      - name: Publish build summary
+        if: always()
+        run: |
+          echo "## 🛠️ Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Plataforma: **StandaloneWindows64**" >> $GITHUB_STEP_SUMMARY
+          echo "- Rama: **${{ github.ref_name }}**" >> $GITHUB_STEP_SUMMARY
+          echo "- Tamaño de la build: **${{ env.BUILD_SIZE }}**" >> $GITHUB_STEP_SUMMARY
+          echo "- Duración: `${{ env.formatted_duration }}`" >> $GITHUB_STEP_SUMMARY
+          echo "- Resultado: ${{ env.STATUS }}" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ job.status }}" != "success" ]; then
+            echo "- ❗ La compilacion ha fallado antes de completar el artefacto." >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ env.BUILD_SIZE }}" != "N/A" ]; then
+            echo "- [🔗 Descargar artifact](${{ env.LINK_ACTION }})" >> $GITHUB_STEP_SUMMARY
+          fi
+
+
+      - name: Show commit changes in summary
+        if: always()
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📦 Cambios incluidos en el commit" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          git log -1 --pretty=format:"%h - %s (%an)" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+

@@ -1,3 +1,5 @@
+####### Importante: Las labels deben estar creadas en el repositorio en la sección issues #######
+
 # Add 'Documentation' label to any file changes within 'docs' or 'guides' folders
 documentation:
 - changed-files:

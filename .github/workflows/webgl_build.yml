@@ -5,10 +5,10 @@ on:
   #     - PRE_PRODUCCION
   #     - PRODUCCION
   workflow_dispatch: {}
-  workflow_run:
-    workflows: ["Create the Windows Build"]
-    types:
-      - completed
+  # workflow_run:
+  #   workflows: ["Create the Windows Build"]
+  #   types:
+  #     - completed
 jobs:
   validate-secrets:
     name: Validate required secrets
@@ -30,8 +30,22 @@ jobs:
             missing_secrets+=("DISCORD_WEBHOOK_URL")
           fi
 
+          optional_secrets=()
+          if [ -z "${{ secrets.ITCHIO_API_KEY }}" ]; then
+            optional_secrets+=("ITCHIO_API_KEY ❗ (No se subirá a Itch.io)")
+          fi
+
+          if [ -z "${{ vars.ITCHIO_CHANNEL }}" ]; then
+            optional_secrets+=("ITCHIO_CHANNEL ❗ (Canal de Itch.io no definido, se usará el predeterminado: pax16/test_devops:webgl)")
+          fi
+
+          if [ ${#optional_secrets[@]} -ne 0 ]; then
+            echo "⚠️ The following optional secrets are NOT set::"
+            printf ' - %s\n' "${optional_secrets[@]}"
+          fi
+
           if [ ${#missing_secrets[@]} -ne 0 ]; then
-            echo "Error: The following secrets are not set: ${missing_secrets[@]} ❌."
+            echo "Error: The following secrets are NOT set: ${missing_secrets[@]} ❌."
             exit 1
           fi
 
@@ -63,6 +77,9 @@ jobs:
     name: Build WebGL
     runs-on: ubuntu-latest
     needs: free-disk-space
+    env:
+      PUBLISH_TO_ITCHIO: ${{ secrets.ITCHIO_API_KEY || 'false' }}
+      ITCHIO_CHANNEL: ${{ vars.ITCHIO_CHANNEL || 'pax16/test_devops:webgl' }}
     strategy:
       fail-fast: false
       matrix:
@@ -107,12 +124,17 @@ jobs:
           unityVersion: ${{ vars.UNITY_VERSION }}
           versioning: Semantic
           buildName: ${{ vars.PROJECT_NAME }} # `build/Roguelike`
-
-      - name: Measure Build Folder Size
-        run: |
-          echo "Build folder size:"
-          du -sh build/WebGL || echo "Build folder not found."
         
+      - name: Calculate Build Size
+        id: build-size
+        run: |
+          if [ -d build/WebGL ]; then
+            size=$(du -sh build/WebGL | cut -f1)
+            echo "BUILD_SIZE=$size" >> $GITHUB_ENV
+          else
+            echo "BUILD_SIZE=N/A" >> $GITHUB_ENV
+            echo "Build folder not found."
+          fi
 
       # Upload Build
       - name: Upload Build
@@ -129,6 +151,22 @@ jobs:
           branch: gh-pages
           folder: build/WebGL
           target-folder: .
+
+      # Subida opcional a Itch.io
+      - name: Install butler
+        if: env.PUBLISH_TO_ITCHIO == 'true'
+        run: |
+          curl -L -o butler.zip https://broth.itch.ovh/butler/linux-amd64/head/archive/default
+          unzip butler.zip -d butler
+          chmod +x butler/butler
+          echo "$PWD/butler" >> $GITHUB_PATH
+
+      - name: Push to Itch.io
+        if: env.PUBLISH_TO_ITCHIO == 'true'
+        env:
+          BUTLER_API_KEY: ${{ secrets.ITCHIO_API_KEY }}
+        run: |
+          butler/butler push build/WebGL $ITCHIO_CHANNEL
 
       - name: Calculate Build Duration
         if: always()
@@ -156,16 +194,28 @@ jobs:
         run: |
           if [ "${{ job.status }}" == "success" ]; then
             echo "STATUS=✅ La build WebGL para la rama **${{ github.ref_name }}** se ha completado con éxito." >> $GITHUB_ENV
+            echo "STATUS_CODE=ok" >> $GITHUB_ENV
             echo "COLOR=3066993" >> $GITHUB_ENV
             echo "THUMBNAIL_URL=https://e7.pngegg.com/pngimages/223/663/png-clipart-green-check-illustration-check-mark-checkbox-yes-miscellaneous-angle.png" >> $GITHUB_ENV
           else
             echo "STATUS=❌ La build WebGL para la rama **${{ github.ref_name }}** ha fallado." >> $GITHUB_ENV
+            echo "STATUS_CODE=fail" >> $GITHUB_ENV
             echo "COLOR=15158332" >> $GITHUB_ENV
             echo "THUMBNAIL_URL=https://e1.pngegg.com/pngimages/720/726/png-clipart-emoji-sticker-x-icon.png" >> $GITHUB_ENV
           fi
 
           echo "LINK_ACTION=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_ENV
           echo "TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_ENV
+
+      - name: Parse itch.io public URL
+        if: env.PUBLISH_TO_ITCHIO == 'true'
+        id: itchurl
+        run: |
+          channel="${ITCHIO_CHANNEL%%:*}" # elimina ":canal"
+          user="${channel%%/*}"
+          game="${channel##*/}"
+          url="https://${user}.itch.io/${game}"
+          echo "ITCHIO_PUBLIC_URL=$url" >> $GITHUB_ENV
 
       # Set notification message
       - name: Set Discord Notification Message
@@ -185,6 +235,7 @@ jobs:
                     { "name": "🌿 Rama ", "value": "${{ github.ref_name }}" },
                     { "name": "🎮 Plataforma ", "value": "WebGL" },
                     { "name": "🔗 Enlace ", "value": "[Ver WebGL](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ vars.PROJECT_NAME }})" },
+                    { "name": "🔗 Itch.io ", "value": "${{ env.PUBLISH_TO_ITCHIO == 'true' && secrets.ITCHIO_API_KEY != '' && env.ITCHIO_PUBLIC_URL != '' && format('[Ver en Itch.io]({0})', env.ITCHIO_PUBLIC_URL) || 'No publicado' }}" },
                     { "name": "⏱️ Duración ", "value": "${{ env.formatted_duration }}" }
                   ],
                   "footer": { 
@@ -203,6 +254,32 @@ jobs:
             }
           EOF
 
+      - name: Generate build metrics JSON
+        if: always()
+        run: |
+          mkdir -p metrics
+          cat <<EOF > metrics/build-metrics.json
+          {
+            "project": "${{ vars.PROJECT_NAME }}",
+            "platform": "StandaloneWindows64",
+            "branch": "${{ github.ref_name }}",
+            "status": "${{ env.STATUS_CODE }}",
+            "build_size": "${{ env.BUILD_SIZE }}",
+            "duration": "${{ env.formatted_duration }}",
+            "commit": "${{ github.sha }}",
+            "commit_message": "$(git log -1 --pretty=format:'%s')",
+            "author": "$(git log -1 --pretty=format:'%an')",
+            "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+      - name: Upload build metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-metrics-${{ vars.PROJECT_NAME }}-${{ github.run_id }}
+          path: metrics/build-metrics.json
+
       # Notify Discord
       - name: Notify Discord
         if: always()
@@ -220,3 +297,37 @@ jobs:
           else
             echo "Mensaje enviado con éxito ✅."
           fi
+
+      - name: Publish build summary
+        if: always()
+        run: |
+          echo "## 🛠️ Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Plataforma: **WebGL**" >> $GITHUB_STEP_SUMMARY
+          echo "- Rama: **${{ github.ref_name }}**" >> $GITHUB_STEP_SUMMARY
+          echo "- Tamaño de la build: **${{ env.BUILD_SIZE }}**" >> $GITHUB_STEP_SUMMARY
+          echo "- Duración: `${{ env.formatted_duration }}`" >> $GITHUB_STEP_SUMMARY
+          echo "- Resultado: ${{ env.STATUS }}" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ job.status }}" != "success" ]; then
+            echo "- ❗ La compilacion ha fallado antes de completar el artefacto." >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ env.BUILD_SIZE }}" != "N/A" ]; then
+            echo "- [🔗 Descargar artifact](${{ env.LINK_ACTION }})" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ env.PUBLISH_TO_ITCHIO }}" == "true" ] && [ "${{ secrets.ITCHIO_API_KEY }}" != "" ]; then
+            echo "- 🕹️ Publicado en Itch.io: [Ver en Itch.io](${{ env.ITCHIO_PUBLIC_URL }})" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- 🕹️ No se publicó en Itch.io (desactivado o sin API key)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+
+      - name: Show commit changes in summary
+        if: always()
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📦 Cambios incluidos en el commit" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          git log -1 --pretty=format:"%h - %s (%an)" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

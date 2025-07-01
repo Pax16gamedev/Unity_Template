@@ -15,8 +15,6 @@
     - bugfix/<nombre>
     - hotfix/<nombre>
     - enhancement/<nombre>
-    - refactor/<nombre>
-    - documentation/<nombre>
     - release/<nombre>
 -->
 - [ ] El nombre de mi rama sigue el formato correcto
