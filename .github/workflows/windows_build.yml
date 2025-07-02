@@ -89,14 +89,40 @@ jobs:
           key: Library-StandaloneWindows64
           restore-keys: Library-
 
+      # Esto lee bundleVersion: 1.0 y guarda 1.0 en BASE_VERSION.
+      - name: Read Application.version from ProjectSettings
+        id: read-version
+        run: |
+          BASE_VERSION=$(grep bundleVersion ProjectSettings/ProjectSettings.asset | awk '{print $2}')
+          echo "BASE_VERSION=$BASE_VERSION" >> $GITHUB_ENV
+          
+            
+      - name: Set custom build version
+        id: versioning
+        run: |
+          RUN_NUMBER=${{ github.run_number }}
+          BRANCH="${{ github.ref_name }}"
+
+          if [[ "$BRANCH" == "DESARROLLO" ]]; then
+            BUILD_VERSION="${BASE_VERSION}.${RUN_NUMBER}-DES"
+          elif [[ "$BRANCH" == "PRE_PRODUCCION" ]]; then
+            BUILD_VERSION="${BASE_VERSION}.${RUN_NUMBER}-PRE"
+          else
+            BUILD_VERSION="${BASE_VERSION}.${RUN_NUMBER}"
+          fi
+
+          echo "BUILD_VERSION=$BUILD_VERSION" >> $GITHUB_ENV
+          echo "buildVersion=$BUILD_VERSION" >> $GITHUB_OUTPUT
+
         # Build
       - name: Build
         uses: game-ci/unity-builder@v4
         with:
           targetPlatform: StandaloneWindows64
           unityVersion: ${{ vars.UNITY_VERSION }}
-          versioning: Semantic
           buildName: ${{ vars.PROJECT_NAME }}
+          versioning: Custom
+          version: ${{ env.BUILD_VERSION }}
 
       - name: Calculate Build Size
         id: build-size
@@ -152,12 +178,12 @@ jobs:
         id: set-vars
         run: |
           if [ "${{ job.status }}" == "success" ]; then
-            echo "STATUS=✅ La build StandaloneWindows64 para la rama **${{ github.ref_name }}** se ha completado con éxito." >> $GITHUB_ENV
+            echo "STATUS=✅ La build StandaloneWindows64 v${{ env.BUILD_VERSION }} para la rama **${{ github.ref_name }}** se ha completado con éxito." >> $GITHUB_ENV
             echo "STATUS_CODE=ok" >> $GITHUB_ENV
             echo "COLOR=3066993" >> $GITHUB_ENV
             echo "THUMBNAIL_URL=https://e7.pngegg.com/pngimages/223/663/png-clipart-green-check-illustration-check-mark-checkbox-yes-miscellaneous-angle.png" >> $GITHUB_ENV
           else
-            echo "STATUS=❌ La build StandaloneWindows64 para la rama **${{ github.ref_name }}** ha fallado." >> $GITHUB_ENV
+            echo "STATUS=❌ La build StandaloneWindows64 v${{ env.BUILD_VERSION }} para la rama **${{ github.ref_name }}** ha fallado." >> $GITHUB_ENV
             echo "STATUS_CODE=fail" >> $GITHUB_ENV
             echo "COLOR=15158332" >> $GITHUB_ENV
             echo "THUMBNAIL_URL=https://e1.pngegg.com/pngimages/720/726/png-clipart-emoji-sticker-x-icon.png" >> $GITHUB_ENV
@@ -178,7 +204,7 @@ jobs:
               "tts": false,
               "embeds": [
                 {
-                  "title": "👷 Workflow terminado",
+                  "title": "👷 Workflow terminado - v${{ env.BUILD_VERSION }}",
                   "url": "${{ env.LINK_ACTION }}",
                   "description": "${{ env.STATUS }}",
                   "color": "${{ env.COLOR }}",
@@ -211,6 +237,7 @@ jobs:
           cat <<EOF > metrics/build-metrics.json
           {
             "project": "${{ vars.PROJECT_NAME }}",
+            "version": "${{ env.BUILD_VERSION }}",
             "platform": "StandaloneWindows64",
             "branch": "${{ github.ref_name }}",
             "status": "${{ env.STATUS_CODE }}",
@@ -252,11 +279,12 @@ jobs:
       - name: Publish build summary
         if: always()
         run: |
-          echo "## 🛠️ Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## 🛠️ Build Summary -  **v${{ env.BUILD_VERSION }}**" >> $GITHUB_STEP_SUMMARY
           echo "- Plataforma: **StandaloneWindows64**" >> $GITHUB_STEP_SUMMARY
           echo "- Rama: **${{ github.ref_name }}**" >> $GITHUB_STEP_SUMMARY
           echo "- Tamaño de la build: **${{ env.BUILD_SIZE }}**" >> $GITHUB_STEP_SUMMARY
           echo "- Duración: `${{ env.formatted_duration }}`" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ env.STATUS_CODE }}" >> $GITHUB_STEP_SUMMARY
           echo "- Resultado: ${{ env.STATUS }}" >> $GITHUB_STEP_SUMMARY
 
           if [ "${{ job.status }}" != "success" ]; then

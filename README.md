@@ -11,6 +11,7 @@ Este repositorio es una plantilla diseñada para agilizar el inicio de nuevos pr
 - 🌐 **Compatibilidad con GitHub Pages**: Despliegue directo de builds WebGL.
 - 🔔 **Integración con Discord**: Notificaciones automáticas sobre el estado de las builds.
 - 🛠 **.gitignore optimizado**: Diseñado para Unity para evitar archivos innecesarios en el control de versiones.
+- 🕹️ **Despliegue opcional a directamente a Itch.io**: Sube automáticamente las builds generadas con WebGL directamente a tu proyecto de Itch.io
 
 ---
 
